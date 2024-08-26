@@ -5,94 +5,107 @@
 #include <dirent.h>
 #include <string.h>
 #include <sys/stat.h>
-
-/*  TODO: todo lo que sigue quiero pasarlo a un file lib.h y 
-    al final de este archivo esta todo lo que iria en su 
-    lib.c correspondiente (los desarrollos de las funciones).
-*/
-
-/*  --------- checkParameters(int argc, char * argv[]) ---------
-    This function is used to check if master program 
-    (app.c's binary file) has been called with proper 
-    command line arguments.
-*/
-void checkParameters(int argc, char * argv[]);
-
-/* --------- processPath(char * path) ---------
-    This function is used to explore command line arguments
-    and open directories, so as to get a clear array of files
-    that must be processed. That clear array is located in it's
-    third parameter.
-*/
-void processPath(char * path);
-
-void processDir(char * path);
-
-void dispatchPath(char * path);
+#include <sys/select.h>
+#include <fcntl.h>
 
 #define START_SLEEP_TIME    2
-#define SLAVES          5       // define max so as to use min between #filesToProcess and max
-#define BLOCK               5
-#define MAX_PATH_LENGTH     260
-#define MAX_ANSWER          
+#define SLAVES              5
+#define MAX_PATH_LENGTH     1024
 
-int quantSlaves = 0;        // each slave get assigned a number used for accessing it's pipe and pid
+void getSlaveAnswer(int pipesS2M[][2]);
+int dispatchPath(int pipesM2S[][2]);
+void processPath(char * path, int pipesM2S[][2], int pipesS2M[][2], pid_t * pids);
+void processDir(char * path, int pipesM2S[][2], int pipesS2M[][2], pid_t * pids);
+pid_t * createSlaves(int quant, int pipesMasterToSlave[][2], int pipesSlaveToMaster[][2], pid_t * pids);
 
-void createSlaves() {
-    // TODO: crear slaves
-}
-
-
-int main(int argc, char * argv[]){
-    pid_t pids[SLAVES]; 
-    int pipesM2S[SLAVES][2];        // pipes used for sending "path" to slaves
-    int pipesS2M[SLAVES][2];        // pipes used for receiving answer from slaves
-
-    checkParameters(argc, argv);
-
-    int file = open("result.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-    if (file == -1) {
-        perror("open");
-        exit(EXIT_FAILURE);
-    }
-
-    for (int i=1; i < argc; i++){
-        processPath(argv[i]);
-    }
-
-    //sleep(START_SLEEP_TIME);
-    // TODO: si aparece el proceso vista compartirle el buffer de memoria compartida
-
-    return 0;
-}
-
-/*  TODO: todo lo que sigue va en lib.c
-*/
-
-void checkParameters(int argc, char * argv[]) {
+int main(int argc, char * argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Error. Must send at least one file path.\n");
         exit(EXIT_FAILURE);
     }
+
+    int pipesMasterToSlave[SLAVES][2];          // [slave 0] -> [read][write]
+                                                // [slave 1] -> [read][write]
+                                                // [slave 2] -> [read][write]
+                                                // [slave 3] -> [read][write]
+                                                // [slave 4] -> [read][write]
+
+    int pipesSlaveToMaster[SLAVES][2];          // [slave 0] -> [read][write]
+                                                // [slave 1] -> [read][write]
+                                                // [slave 2] -> [read][write]
+                                                // [slave 3] -> [read][write]
+                                                // [slave 4] -> [read][write]
+
+    // create pipes
+    for (int slaveID=0; slaveID < SLAVES; slaveID++) {
+        if (pipe(pipesMasterToSlave[slaveID]) == -1 || pipe(pipesSlaveToMaster[slaveID]) == -1) {
+            perror("Pipe error. Aborting.\n");
+            exit(EXIT_FAILURE);
+        }
+        printf("created pipes for slave %d\n", slaveID);
+    }
+
+    // create slaves
+    pid_t pids[SLAVES];
+    for (int slaveID=0; slaveID < SLAVES; slaveID++) {
+        pid_t currPid = fork();
+        if (currPid == -1) {
+            perror("Forking error. Aborting.\n");
+            exit(EXIT_FAILURE);
+        }
+        if (currPid == 0) {
+            // slave (child) process
+            close(pipesMasterToSlave[slaveID][1]);
+            dup2(pipesMasterToSlave[slaveID][0], STDIN_FILENO);            // TODO: falta verificar que el dup no haya dado error (if == -1)
+            close(pipesMasterToSlave[slaveID][0]);
+
+            close(pipesSlaveToMaster[slaveID][0]);
+            dup2(pipesSlaveToMaster[slaveID][1], STDOUT_FILENO);            // TODO: falta verificar que el dup no haya dado error (if == -1)
+            close(pipesSlaveToMaster[slaveID][1]);
+
+            char * argv[] = {"./slave", NULL};
+            char * envp[] = {NULL};
+            execve("./slave", argv, envp);
+            perror("Execve error. Aborting.\n");
+            exit(EXIT_FAILURE);
+        }
+        else {
+            close(pipesMasterToSlave[slaveID][0]);
+            close(pipesSlaveToMaster[slaveID][1]);
+            pids[slaveID] = currPid;
+            printf("created slave %d with pid %d\n", slaveID, currPid);        // TODO: borrar
+        }
+    }
+
+    // process paths (command line arguments)
+    for (int i = 1; i < argc; i++) {
+        printf("path: %s\n", argv[i]);
+        processPath(argv[i], pipesMasterToSlave, pipesSlaveToMaster, pids);
+    }
 }
-// crear pipe para enviarle el path como stdin
-// reemplazar el stdin del slave y cerrar su stdout
-// crear otro pipe para recibir el resultado del slave 
-// reemplazar el stdout del slave y cerrar su stdin
-// mandarle el path a un slave
 
-void dispatchPath(char * path) {
-    if (quantSlaves == 0){
-        createSlaves();
-    } 
-
-    quantSlaves++;
-    printf("%s\n", path);   // TODO: borrar esto es solo para testear
+void processPath(char * path, int pipesM2S[][2], int pipesS2M[][2], pid_t * pids) {
+    struct stat fileStat;
+    stat(path, &fileStat);
+    if (S_ISDIR(fileStat.st_mode)) {
+        processDir(path, pipesM2S, pipesS2M, pids);
+    }
+    else {
+        printf("path 2 %s\n", path);
+        int slaveID = dispatchPath(pipesM2S);
+        printf("%d\n", slaveID);
+        if (write(pipesM2S[slaveID][1], path, strlen(path) + 1) == -1) {
+            perror("Writing error.\n");
+            exit(EXIT_FAILURE);
+        }
+        printf("ya escribio\n");
+        getSlaveAnswer(pipesS2M);
+        return;
+    }
 }
-
 
 // https://c-for-dummies.com/blog/?p=3246 
-void processDir(char * path) {
+void processDir(char * path, int pipesM2S[][2], int pipesS2M[][2], pid_t * pids) {
     DIR * dir = opendir(path);   // open said directory
         if (dir == NULL) {
             perror("No se pudo abrir el directorio");
@@ -105,63 +118,88 @@ void processDir(char * path) {
         }
         char auxPath[MAX_PATH_LENGTH];
         snprintf(auxPath, sizeof(auxPath), "%s/%s", path, dirEntry->d_name);
-        processPath(auxPath);
+        processPath(auxPath, pipesM2S, pipesS2M, pids);
     }
+    closedir(dir);
 }
 
-void processPath(char * path) {
-    struct stat fileStat;
-    stat(path, &fileStat);
-    if (S_ISDIR(fileStat.st_mode)) {
-        processDir(path);
+int dispatchPath(int pipesM2S[][2]) { 
+    // fd_set readFDS;
+    // FD_ZERO(&readFDS);
+    fd_set writeFDS;
+    FD_ZERO(&writeFDS);
+    
+    int maxFD = 0;
+    for (int i=0; i < SLAVES; i++) {
+        // FD_SET(pipesS2M[i][0], &readFDS);
+        FD_SET(pipesM2S[i][1], &writeFDS);
+        if (/*pipesS2M[i][0] > maxFD ||*/ pipesM2S[i][1] > maxFD) {
+            maxFD = pipesM2S[i][1];
+        }
     }
-    else {
-        dispatchPath(path);
+    int status = select(maxFD + 1, /*&readFDS*/ NULL, &writeFDS, NULL, NULL);
+    printf("%d\n", status);
+    //if (status < 0) {
+    //    perror("Select error.\n");        // TODO: descomentar
+    //    exit(EXIT_FAILURE);
+    //} 
+    //else {
+        printf("status > 0\n");
+        for (int slaveID=0; slaveID < SLAVES; slaveID++) {
+            if (FD_ISSET(pipesM2S[slaveID][1], &writeFDS)) {
+                return slaveID;
+                // if (FD_ISSET(pipesS2M[slaveID][0], &readFDS)) {      // TODO: borrar
+                //     char slaveAns[1024];
+                //     int len = read(pipesS2M[slaveID][0], slaveAns, sizeof(slaveAns));
+                //     printf("Readed %d bytes", len);
+                //     printf("Slave ans is %s", slaveAns);
+                //     printf("Slave's pid is %d", pids[slaveID]);
+                //     return slaveAns;
+                // }
+            }
+            // break;
+        }
+    }
+//}
+
+void getSlaveAnswer(int pipesS2M[][2]) {
+    fd_set readFDS;
+    FD_ZERO(&readFDS);
+    int maxFD = 0;
+    for (int i=0; i < SLAVES; i++) {
+        FD_SET(pipesS2M[i][0], &readFDS);
+        if (pipesS2M[i][0] > maxFD /*|| pipesM2S[i][1] > maxFD*/) {
+            maxFD = pipesS2M[i][0];
+        }
+    }
+    int status = select(maxFD + 1, &readFDS, /*&writeFDS*/ NULL, NULL, NULL);
+
+    if (status == -1) {
+        perror("Select error. Aborting.\n");
+        exit(EXIT_FAILURE);
+    }
+    else if (status > 0) {
+        printf("Status is greater than zero\n");
+        for (int slaveID=0; slaveID < SLAVES; slaveID++) {
+            if (FD_ISSET(pipesS2M[slaveID][0], &readFDS)) {
+                char buffer[1024];
+                int len = read(pipesS2M[slaveID][0], buffer, sizeof(buffer));
+                if (len == -1) {
+                    perror("Reading error.\n");
+                    exit(EXIT_FAILURE);
+                }
+                buffer[len] = '\0';
+                printf("%s\n", buffer);
+                // if (FD_ISSET(pipesS2M[slaveID][0], &readFDS)) {
+                //     char slaveAns[1024];
+                //     int len = read(pipesS2M[slaveID][0], slaveAns, sizeof(slaveAns));
+                //     printf("Readed %d bytes", len);
+                //     printf("Slave ans is %s", slaveAns);
+                //     printf("Slave's pid is %d", pids[slaveID]);
+                //     return slaveAns;
+                // }
+            }
+            // break;
+        }
     }
 }
-
-/*
-if (pipe(pipesM2S[quantSlaves][]) == -1) {          // create pipeM2S to send path as stdin for slave
-        perror("Pipe error. Aborting.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (pipe(pipesS2M[quantSlaves][]) == -1) {          // create pipeS2M to receive answer from slave
-        perror("Pipe error. Aborting.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    pid_t pid = fork();
-    if (pid < 0) {                                      // case: fork error
-        perror("Fork error. Aborting.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (pid == 0) {                                         // case: child process
-        close(pipesM2S[quantSlaves][1]);                    // close writing end of the pipeM2S -> slave will only receive through this one
-        close(pipeS2M[quantSlaves][0]);                     // close receiving end of the pipeS2M -> slave will only write through this one
-        if (dup2(pipeM2S[quantSlaves][0], STDIN_FILENO)) {  // redirect STDIN
-            perror("Dup2 error. Aborting.\n");
-            exit(EXIT_FAILURE);
-        }
-        if (dup2(pipeS2M[quantSlaves][1], STDOUT_FILENO)) { // redirect STDOUT
-            perror("Dup2 error. Aborting.\n");
-            exit(EXIT_FAILURE);
-        }
-        close(pipeM2S[quantSlaves][0]);                     // close original receiving end of pipeM2S
-        close(pipeS2M[quantSlaves][1]);                     // close original writing end of pipeS2M
-        char * argv[] = {"./slave", NULL};
-        execve("./slave", argv, NULL);
-        perror("Execve error. Aborting.\n");
-        exit(EXIT_FAILURE);
-    }
-    else {                                                  // case: parent process
-        close(pipesM2S[quantSlaves][0]);                    // close receiving end of the pipeM2S -> master will only write through this one
-        write(pipeS2M[quantSlaves][1], "result.txt", strlen("result.txt")); // write stdout for child
-        close(pipeS2M[quantSlaves][1]);                     // close writing end of the pipeS2M -> master will only receive through this one
-        write(pipeM2S[quantSlaves][1], path, strlen(path));
-        close(pipeM2S[quantSlaves][1]);                     // close pipe after writing path
-        pids[quantSlaves] = pid;
-        waitpid(pid, NULL, 0);
-        close(pipeS2M[quantSlaves][0]);                     // close receiving nd
-    }
-
-*/

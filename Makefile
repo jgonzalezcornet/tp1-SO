@@ -29,4 +29,4 @@ $(TARGET_VISTA): $(OBJECTS_VISTA)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJECTS_ALL) $(TARGET_ALL)
+	rm -f $(OBJECTS_ALL) $(TARGET_ALL) result.txt
