@@ -4,85 +4,57 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/select.h>
 
 #define BUFFMAX 100
 #define BLOCK 5
+#define MAX_PATH 200
+#define PIPE_R 0
+#define PIPE_W 1
+#define MAX_PID 5
+#define MD5_LEN 32
 
-// Guarda en paths:
-//[0]: "/bin/md5sum"
-//[1]: "archivo1"
-//[2]: "archivo2"
-//...
-int savePaths(char ** paths, char * buffer) {
-
-    int count = 0;
-    char * token = strtok(buffer , " ");
-
-    while (token) {
-        if(((count+1) % BLOCK) == 0) {
-            paths = realloc(paths,count+BLOCK+1);
-        }
-        paths[1+count] = token;
-        count++;
-        token = strtok(NULL," ");
+int createPipe(int fds[]){
+    if(pipe(fds) < 0){
+        perror("pipe");
+        return -1;
     }
-    paths[count+1] = NULL;
-
-    return count;
+    return 0;
 }
 
-int main(){
-    char buffer[BUFFMAX];
-    char ** paths = malloc(sizeof(char *) * BLOCK + 1);
-    paths[0] = "/bin/md5sum";
-    int n;
+int main() {
+   
+    char file[MAX_PATH] = {0};
 
-    while ((n = read(STDIN_FILENO , buffer , BUFFMAX))){
-        if (n < 0){
-            perror("read");
-            exit(1);
-        }
-        if (n == 1){
-            continue;
-        }
-        buffer[n-1] = 0;
-        
-        int count = savePaths(paths, buffer);
+    while(scanf("%s", file) != EOF) {
 
-        //Creamos un pipe y redirigimos la escritura de md5 a el.
+        // Creamos un pipe y redirigimos la escritura de md5 a el.
         int p[2];
-        pipe(p);
+        if(createPipe(p) == -1)
+            break;
+
         if (fork() == 0) {
-            close(STDOUT_FILENO);
-            dup(p[1]);
-            close(p[1]);
-            close(p[0]);
+            dup2(p[PIPE_W], STDOUT_FILENO);
+            close(p[PIPE_W]);
+            close(p[PIPE_R]);
+            
+            char * paths[] = {"/bin/md5sum", file, NULL};
             execve("/bin/md5sum", paths , NULL);
-        }
-        
-        //Backupeamos la entrada estandar
-        int stdin_backup = dup(STDIN_FILENO);
-        close(STDIN_FILENO);
-
-        //Dupicamos el fd de lectura del pipe
-        int aux = dup(p[0]);
-
-        close(p[1]);
-        close(p[0]);
-        
-        //Leemos y escribimos la salida
-        char rta[1000];
-        for (size_t i = 0; i < count; i++) {
-            int len = read(0,rta,1000);
-            rta[len-1] = 0;
-            puts(rta);
+            perror("execve\n");
+            exit(EXIT_FAILURE);
         }
 
-        //@TODO: no hace falta validar len < 0??
+        char md5[MD5_LEN];
+        ssize_t md5Len = read(p[PIPE_R], md5, MD5_LEN);
+        md5[md5Len] = 0;
 
-        close(aux);
-        dup2(stdin_backup, STDIN_FILENO);
-        close(stdin_backup);
+        //Modularizar
+        int pid = getpid();
+        char result[MAX_PATH + md5Len + MAX_PID + 21];                      //21 por el siguiente texto
+        sprintf(result, "%s: %s - processed by %d\n", file, md5, pid);
+
+        write(STDOUT_FILENO, result, strlen(result));
     }
+
     return 0;
 }
