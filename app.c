@@ -5,184 +5,149 @@
 #include <signal.h>
 #include <fcntl.h>
 
-#define SLAVES              5
+#define SLAVES              2
 #define FILESPERSLAVE       2
-#define MIN(a,b)            (((a) < (b)) ? (a) : (b))
+#define BUFF_MAX            1024
 
-int copyString(const char * str, char * buffer) {
-    int len;
-    for (len = 0; *(str + len) != 0; len++) {
-        *(buffer + len) = *(str + len);
-    }
-    *(buffer + len) = '\n';
-    *(buffer + len + 1) = 0;
-    return len + 1;
-}
-
-int main(int argc, char * argv[]) {
-    if (argc < 2) {
+void checkParams(int argc){
+    if(argc < 2) {
         fprintf(stderr, "Error. Must send at least one file path.\n");
         exit(EXIT_FAILURE);
     }
+}
 
-    int masterToSlave[SLAVES];          // pipes used to communicate from master to slaves
-    int slaveToMaster[SLAVES];          // pipes used to communicate from slaves to master
-    pid_t pids[SLAVES];
+void getSlaveLoad(){
+    //@TODO: develop
+    return;
+}
 
-    char * slaveArgv[] = {"./slave", NULL};
-    char * envp[] = {NULL};
+int sendFile(char* file, int fileCount, int fd){
+    if(write(fd, file, strlen(file) + 1) == -1 || write(fd, "\n", 1) == -1)
+        return -1;
+    return 0;
+}
 
+int readFile(int fd){
+    char buffer[BUFF_MAX];
+    int len = read(fd, buffer, sizeof(buffer));
+    if (len < 0) {
+        return -1;
+    }
+    buffer[len-1] = 0;
+    printf("%s\n", buffer);
+    return 0;
+}
+
+int main(int argc, char * argv[]) {
+    
+    //Chequeo de parametros
+    checkParams(argc);
+
+    //Calculamos la cantidad de esclavos y la carga
+    getSlaveLoad();
+
+    //Creamos los pipes de comunicacion entre master y slaves.
+    int masterToSlave[SLAVES][2];          // pipes used to communicate from master to slaves
+    int slaveToMaster[SLAVES][2];          // pipes used to communicate from slaves to master
+    pid_t slavePids[SLAVES];
+    int maxFD = -1;
+
+    //Abrimos el archivo de resultado
     int file = open("result.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
     if (file < 0) {
         perror("Open error.");
         exit(EXIT_FAILURE);
     }
 
-    for (int i = 0; i < SLAVES; i++) {       // create slaves and their corresponding pipes
-        int m2s[2], s2m[2];
-        if ((pipe(m2s) == -1) | (pipe(s2m) == -1)) {
+    //Creamos los procesos esclavo junto con sus pipes
+    char * slaveArgv[] = {"./slave", NULL};
+    char * envp[] = {NULL};
+
+    int filesWritten = 0;
+
+    for (int i = 0; i < SLAVES; i++) {
+        if ((pipe(masterToSlave[i]) == -1) | (pipe(slaveToMaster[i]) == -1)) {
             perror("Pipes error.");
             exit(EXIT_FAILURE);
         }
 
-        pid_t cpid = fork();
-        if (cpid < 0) {
+        slavePids[i] = fork();
+        if (slavePids[i] < 0) {
             perror("Fork error.");
             exit(EXIT_FAILURE);
         }
-        if (cpid == 0) {                                // child (slave) process
-            
-            close(m2s[1]);
-            if (dup2(m2s[0], STDIN_FILENO) == -1) {
-                perror("Dup error.");
-                exit(EXIT_FAILURE);
-            }
-            close(m2s[0]);
 
-            close(s2m[0]);
-            if (dup2(s2m[1], STDOUT_FILENO) == -1) {
+        if (slavePids[i] == 0) {                               
+            //Child process
+            close(slaveToMaster[i][0]);
+
+            if (dup2(masterToSlave[i][0], STDIN_FILENO) == -1) {
                 perror("Dup error.");
                 exit(EXIT_FAILURE);
             }
-            close(s2m[1]);
+            close(masterToSlave[i][0]);
+
+            if (dup2(slaveToMaster[i][1], STDOUT_FILENO) == -1) {
+                perror("Dup error.");
+                exit(EXIT_FAILURE);
+            }
+            close(slaveToMaster[i][1]);
 
             execve("./slave", slaveArgv, envp);
             perror("Execve error.");
             exit(EXIT_FAILURE);
         }
-        pids[i] = cpid;                                // parent (master) process
-        close(m2s[0]);
-        close(s2m[1]);
-        
-        masterToSlave[i] = m2s[1];
-        slaveToMaster[i] = s2m[0];
-    }
-    int maxFD = slaveToMaster[4];
+        //Parent process
+        close(masterToSlave[i][0]);
+        close(slaveToMaster[i][1]);
+        maxFD = slaveToMaster[i][0] > maxFD ? slaveToMaster[i][0] : maxFD;
 
-    int filesRead = 0 , filesWritten = 0 , readable = SLAVES;
-    char processing[SLAVES] = {0};
+        //Enviamos los primeros archivos a los esclavos
+        for(int k = 0; k < FILESPERSLAVE && filesWritten < argc - 1; k++){
+            if(sendFile(argv[filesWritten + 1], 1, masterToSlave[i][1]) == -1){
+                perror("Write files");
+                exit(1);
+            }
+            filesWritten++;
+        }
+    }
+
+    int filesRead = 0;
+    char full[SLAVES] = {0};
     fd_set readFDS;
     FD_ZERO(&readFDS);
     do{
         for (int i = 0; i < SLAVES ; i++) {
-            if (FD_ISSET(slaveToMaster[i], &readFDS)) { 
-                readable--;
-                char buffer[1024];
-                int len = read(slaveToMaster[i], buffer, sizeof(buffer));
-                if (len < 0) {
+            if (FD_ISSET(slaveToMaster[i][0], &readFDS)) { 
+                if(readFile(slaveToMaster[i][0]) == -1){
                     perror("Read error.");
                     exit(EXIT_FAILURE);
                 }
-                buffer[len-1] = 0;
-                printf("%s processed by %d\n", buffer, pids[i]);
-                filesRead += FILESPERSLAVE;
-                processing[i] = 0;
+                filesRead++;
+                full[i] = 0;
             }
-            if(!processing[i]){
-                int len = 0;
-                for (int j = 1; (j <= FILESPERSLAVE ) && (filesWritten + j < argc); j++) {
-                    len += strlen(argv[filesWritten + j]);
-                    argv[filesWritten + 1][len++] = ' ';
+            if(!full[i] && filesWritten < argc - 1){
+                if(sendFile(argv[filesWritten + 1], 1, masterToSlave[i][1]) == -1){
+                    perror("Write files");
+                    exit(1);
                 }
-                write(masterToSlave[i], argv[filesWritten + 1] , len + 1); //TODO: chequear si se deberia agregar un \n
-                filesWritten += FILESPERSLAVE;
-                processing[i] = 1;
+                filesWritten++;
+                full[i] = 1;               
             }
         }
+
         FD_ZERO(&readFDS);
         for (int i = 0; i < SLAVES; i++) {
-            FD_SET(slaveToMaster[i], &readFDS);  // TODO: ver si es redundante el 0 o no
+            FD_SET(slaveToMaster[i][0], &readFDS);  // TODO: ver si es redundante el 0 o no
         }
-    } while(filesRead < argc && (readable = select(maxFD + 1, &readFDS, NULL, NULL, NULL)));
+
+    } while(filesRead < (argc - 1) && select(maxFD + 1, &readFDS, NULL, NULL, NULL));
     
-    char c = EOF;
+    //Cerramos los pipes para matar los procesos esclavos
     for (int i = 0; i < SLAVES; i++) {
-        write(masterToSlave[i] , &c , 1);
-        close(masterToSlave[i]);
-        close(slaveToMaster[i]);
+        close(masterToSlave[i][1]);
+        close(slaveToMaster[i][0]);
     }
 
- /*        
-        for (int j = 0; (j < FILESPERSLAVE - 1) && (pathNum + j < argc); j++) {
-                    char buffer[1024];
-                    int len = copyString(argv[pathNum + j], buffer);
-                    write(masterToSlave[i], buffer, len);
-                }
-
-        int maxFD = 0;
-        for (int i = 0; i < SLAVES; i++) {
-            if (masterToSlave[i] > maxFD) {      // TODO: ver si es redundante el 1 o no
-                maxFD = masterToSlave[i];
-            }
-            if (slaveToMaster[i] > maxFD) {      // TODO: ver si es redundante el 0 o no
-                maxFD = slaveToMaster[i];
-            }
-        }
-
-        for (int i = 0; i < SLAVES; i++) {
-            FD_SET(slaveToMaster[i], &readFDS);  // TODO: ver si es redundante el 0 o no
-            FD_SET(masterToSlave[i], &writeFDS); // TODO: ver si es redundante el 1 o no
-        }
-
-        int available = select(maxFD + 1, &readFDS, &writeFDS, NULL, NULL);
-        if (available < 0){
-            perror("Select error");
-            exit(EXIT_FAILURE);
-        }
-
-        
-        // available > 0
-        for (int i = 0; i < SLAVES; i++) {
-            if (FD_ISSET(masterToSlave[i], &writeFDS)) { 
-                for (int j = 0; (j < FILESPERSLAVE - 1) && (pathNum + j < argc); j++) {
-                    char buffer[1024];
-                    int len = copyString(argv[pathNum + j], buffer);
-                    write(masterToSlave[i], buffer, len);
-                }
-            } 
-           FD_ZERO(&readFDS);
-           FD_SET(slaveToMaster[i], &readFDS); 
-           write(masterToSlave[0] , argv[1],6);
-            select(slaveToMaster[i] + 1, &readFDS, NULL, NULL, NULL);
-            if (FD_ISSET(slaveToMaster[i], &readFDS)) {
-                char buffer[1024];
-                int len = read(slaveToMaster[i], buffer, sizeof(buffer));
-                if (len < 0) {
-                    perror("Read error.");
-                    exit(EXIT_FAILURE);
-                }
-                buffer[len-1] = 0;
-                printf("%s processed by %d\n", buffer, pids[i]);
-            }
-        }
-    }*/
-
-    // TODO: VER SI HACE FALTA
-    for (int i = 0; i < SLAVES; i++) {
-        close(masterToSlave[i]);
-        close(slaveToMaster[i]);
-        if (kill(pids[i], SIGTERM) == -1) {
-            perror("Kill error.");
-        }
-    } 
+    return 0;
 }

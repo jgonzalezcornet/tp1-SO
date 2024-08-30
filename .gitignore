@@ -133,4 +133,5 @@ Temporary Items
 slave
 app
 vista
-.txt
+*.txt
+docker.sh
