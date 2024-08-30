@@ -77,13 +77,57 @@ int main(int argc, char * argv[]) {
         masterToSlave[i] = m2s[1];
         slaveToMaster[i] = s2m[0];
     }
+    int maxFD = slaveToMaster[4];
 
-
-    for (int pathNum = 1; pathNum < argc; pathNum = pathNum + FILESPERSLAVE) {
-        fd_set readFDS;
-        fd_set writeFDS;
+    int filesRead = 0 , filesWritten = 0 , readable = SLAVES;
+    char processing[SLAVES] = {0};
+    fd_set readFDS;
+    FD_ZERO(&readFDS);
+    do{
+        for (int i = 0; i < SLAVES ; i++) {
+            if (FD_ISSET(slaveToMaster[i], &readFDS)) { 
+                readable--;
+                char buffer[1024];
+                int len = read(slaveToMaster[i], buffer, sizeof(buffer));
+                if (len < 0) {
+                    perror("Read error.");
+                    exit(EXIT_FAILURE);
+                }
+                buffer[len-1] = 0;
+                printf("%s processed by %d\n", buffer, pids[i]);
+                filesRead += FILESPERSLAVE;
+                processing[i] = 0;
+            }
+            if(!processing[i]){
+                int len = 0;
+                for (int j = 1; (j <= FILESPERSLAVE ) && (filesWritten + j < argc); j++) {
+                    len += strlen(argv[filesWritten + j]);
+                    argv[filesWritten + 1][len++] = ' ';
+                }
+                write(masterToSlave[i], argv[filesWritten + 1] , len + 1); //TODO: chequear si se deberia agregar un \n
+                filesWritten += FILESPERSLAVE;
+                processing[i] = 1;
+            }
+        }
         FD_ZERO(&readFDS);
-        FD_ZERO(&writeFDS);
+        for (int i = 0; i < SLAVES; i++) {
+            FD_SET(slaveToMaster[i], &readFDS);  // TODO: ver si es redundante el 0 o no
+        }
+    } while(filesRead < argc && (readable = select(maxFD + 1, &readFDS, NULL, NULL, NULL)));
+    
+    char c = EOF;
+    for (int i = 0; i < SLAVES; i++) {
+        write(masterToSlave[i] , &c , 1);
+        close(masterToSlave[i]);
+        close(slaveToMaster[i]);
+    }
+
+ /*        
+        for (int j = 0; (j < FILESPERSLAVE - 1) && (pathNum + j < argc); j++) {
+                    char buffer[1024];
+                    int len = copyString(argv[pathNum + j], buffer);
+                    write(masterToSlave[i], buffer, len);
+                }
 
         int maxFD = 0;
         for (int i = 0; i < SLAVES; i++) {
@@ -105,6 +149,7 @@ int main(int argc, char * argv[]) {
             perror("Select error");
             exit(EXIT_FAILURE);
         }
+
         
         // available > 0
         for (int i = 0; i < SLAVES; i++) {
@@ -114,7 +159,11 @@ int main(int argc, char * argv[]) {
                     int len = copyString(argv[pathNum + j], buffer);
                     write(masterToSlave[i], buffer, len);
                 }
-            }
+            } 
+           FD_ZERO(&readFDS);
+           FD_SET(slaveToMaster[i], &readFDS); 
+           write(masterToSlave[0] , argv[1],6);
+            select(slaveToMaster[i] + 1, &readFDS, NULL, NULL, NULL);
             if (FD_ISSET(slaveToMaster[i], &readFDS)) {
                 char buffer[1024];
                 int len = read(slaveToMaster[i], buffer, sizeof(buffer));
@@ -126,7 +175,7 @@ int main(int argc, char * argv[]) {
                 printf("%s processed by %d\n", buffer, pids[i]);
             }
         }
-    }
+    }*/
 
     // TODO: VER SI HACE FALTA
     for (int i = 0; i < SLAVES; i++) {
@@ -135,5 +184,5 @@ int main(int argc, char * argv[]) {
         if (kill(pids[i], SIGTERM) == -1) {
             perror("Kill error.");
         }
-    }
+    } 
 }
