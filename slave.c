@@ -14,24 +14,23 @@
 #define MAX_PID 5
 #define MD5_LEN 32
 
-int createPipe(int fds[]){
+int createPipe(int fds[]) {
     if(pipe(fds) < 0){
-        perror("pipe");
+        perror("Pipe error.");
         return -1;
     }
     return 0;
 }
 
-int main() {
-   
+int main(int argc, char * argv[]) {
     char file[MAX_PATH] = {0};
 
     while(scanf("%s", file) != EOF) {
-
         // Creamos un pipe y redirigimos la escritura de md5 a el.
         int p[2];
-        if(createPipe(p) == -1)
-            break;
+        if(createPipe(p) == -1) {
+            exit(EXIT_FAILURE);
+        }
 
         if (fork() == 0) {
             dup2(p[PIPE_W], STDOUT_FILENO);
@@ -40,7 +39,7 @@ int main() {
             
             char * paths[] = {"/bin/md5sum", file, NULL};
             execve("/bin/md5sum", paths , NULL);
-            perror("execve\n");
+            perror("Execve error\n");
             exit(EXIT_FAILURE);
         }
 
@@ -48,13 +47,12 @@ int main() {
         ssize_t md5Len = read(p[PIPE_R], md5, MD5_LEN);
         md5[md5Len] = 0;
 
-        //Modularizar
+        // Modularizar
         int pid = getpid();
         char result[MAX_PATH + md5Len + MAX_PID + 21];                      //21 por el siguiente texto
-        sprintf(result, "%s: %s - processed by %d\n", file, md5, pid);
+        sprintf(result, "%s - %s - processed by %d\n", file, md5, pid);
 
         write(STDOUT_FILENO, result, strlen(result));
     }
-
     return 0;
 }
