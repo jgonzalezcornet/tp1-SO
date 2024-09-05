@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include "slaveADT.h"
 
-#define SLAVES              5
+#define SLAVES              6
 #define FILESPERSLAVE       2
 #define BUFF_MAX            1024
 
@@ -35,11 +35,11 @@ int main(int argc, char * argv[]) {
 
     slaveADT slaves[SLAVES];
     char * slaveArgv[] = {"./slave", NULL};
-    char * envp[] = {NULL};
+
     int filesWritten = 0;
     for (size_t i = 0; i < SLAVES; i++)
     {
-        slaves[i] = createSlave(slavePath , slaveArgv , envp);
+        slaves[i] = createSlave(slavePath , slaveArgv , NULL);
          // Enviamos los primeros archivos a los esclavos
         for(int k = 0; k < FILESPERSLAVE && filesWritten < argc - 1; k++) {
             if ( writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) + 1 )  == -1){
@@ -51,10 +51,11 @@ int main(int argc, char * argv[]) {
     }
     int filesRead = 0;
     char full[SLAVES];
-    write(4,"slave" , 6);
-    char aux[100]; 
-    readFromSlave(slaves[0],aux, 100);
-    puts("hola");
+    for (size_t i = 0; i < SLAVES; i++)
+    {
+        full[i] = 1;
+    }
+    
     for (size_t i = 0; i < SLAVES; i++) full[i] = 1;
     while (filesRead < argc - 1)
     {
@@ -74,7 +75,7 @@ int main(int argc, char * argv[]) {
                 full[i] = 0;
                 printf("%s\n", buffer);
             } 
-            if (!full[i] || filesWritten < argc - 1)
+            if (!full[i] && filesWritten < argc - 1)
             {
                 writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) );
                 filesWritten++;
