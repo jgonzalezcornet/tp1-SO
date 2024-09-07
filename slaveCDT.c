@@ -6,6 +6,7 @@
 #define PIPE_WRITE 1
 #define PIPE_READ 0
 #define BLOCK 10
+#define OPEN_PIPE_MAX 256
 
 struct slaveCDT{
     int pid;
@@ -14,20 +15,11 @@ struct slaveCDT{
 };
  
 int openPipeEndCount = 0;
-int * openPipes = NULL;
+int openPipes[OPEN_PIPE_MAX];
 
 fd_set read_fds;
 
 int addOpenPipeEnds(int e1 ,int e2){
-    if ((openPipeEndCount % BLOCK) == 0)
-    {
-        openPipes = realloc(openPipes , sizeof(int) * (BLOCK + openPipeEndCount ));
-        if (openPipes == NULL )
-        {
-            return -1;
-        }
-        
-    }
     openPipes[openPipeEndCount++] = e1;
     openPipes[openPipeEndCount++] = e2;
     return 0;
@@ -51,7 +43,6 @@ slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
         free(slave);
         return NULL;
     }
-    
     int pid = fork();
     if (pid < 0) {
         // Fork failed
@@ -158,6 +149,4 @@ void closeSlaves(slaveADT * slaves , size_t count){
         close(slaves[i]->sstdout);
         free(slaves[i]);
     }
-    free(openPipes);
-    
 }
