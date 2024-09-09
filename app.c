@@ -8,7 +8,7 @@
 #define SLAVES              6
 #define FILESPERSLAVE       2
 #define BUFF_MAX            1024
-
+#define MIN(a,b) (a) < (b) ? a : b;
 char * slavePath = "./slave";
 
 void checkParams(int argc){
@@ -25,6 +25,7 @@ void getSlaveLoad(){
 
 int main(int argc, char * argv[]) {
 
+    int slaveCount = MIN(SLAVES , argc - 1)
     // Chequeo de parametros
     checkParams(argc);
 
@@ -36,7 +37,7 @@ int main(int argc, char * argv[]) {
     char * slaveArgv[] = {"./slave", NULL};
 
     int filesWritten = 0;
-    for (size_t i = 0; i < SLAVES; i++)
+    for (size_t i = 0; i < slaveCount; i++)
     {
         slaves[i] = createSlave(slavePath , slaveArgv , NULL);
          // Enviamos los primeros archivos a los esclavos
@@ -49,8 +50,8 @@ int main(int argc, char * argv[]) {
         }
     }
     int filesRead = 0;
-    char full[SLAVES];
-    for (size_t i = 0; i < SLAVES; i++)
+    char full[slaveCount];
+    for (size_t i = 0; i < slaveCount; i++)
     {
         full[i] = 1;
     }
@@ -60,11 +61,11 @@ int main(int argc, char * argv[]) {
         perror("open");
         exit(EXIT_FAILURE);
     }
-    for (size_t i = 0; i < SLAVES; i++) full[i] = 1;
+    for (size_t i = 0; i < slaveCount; i++) full[i] = 1;
     while (filesRead < argc - 1)
     {
-        anyReadable(slaves,SLAVES);
-        for (size_t i = 0; i < SLAVES; i++)
+        anyReadable(slaves,slaveCount);
+        for (size_t i = 0; i < slaveCount; i++)
         {
             if (isReadable(slaves[i]))
             {
@@ -96,6 +97,6 @@ int main(int argc, char * argv[]) {
 
     }
     close(resultFd);
-    closeSlaves(slaves , SLAVES);
+    closeSlaves(slaves , slaveCount);
     return 0;
 }
