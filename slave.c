@@ -1,3 +1,5 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -19,7 +21,10 @@ int main(int argc, char * argv[]) {
     char file[MAX_PATH] = {0};
 
     char * paths[] = {MD5_PATH, file, NULL};
-    while(scanf("%s", file) != EOF) {
+    char format[FORMAT_LENGHT];
+
+    sprintf(format , "%%%ds",MAX_PATH - 1);
+    while(scanf(format, file) != EOF) {
         slaveADT slaveMd5 = createSlave( MD5_PATH, paths , NULL);
         if (slaveMd5 == NULL)
         {
@@ -37,9 +42,13 @@ int main(int argc, char * argv[]) {
         md5[md5Len] = 0;
 
         int pid = getpid();
-        char result[MAX_PATH + md5Len + MAX_PID + FORMAT_LENGHT];                     
-        sprintf(result, OUTPUT_FORMAT , file, md5, pid);
-        write(STDOUT_FILENO, result, strlen(result));
+        char result[MAX_PATH + md5Len + MAX_PID + FORMAT_LENGHT];           
+        int aux = sprintf(result, OUTPUT_FORMAT , file, md5, pid);          
+        if ( aux < 0 ){
+            perror("sprintf");
+            exit(EXIT_FAILURE);
+        }
+        write(STDOUT_FILENO, result, aux);
         closeSlaves(&slaveMd5,1);
     }
     return 0;

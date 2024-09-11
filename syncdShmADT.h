@@ -8,9 +8,9 @@ syncdShmADT createSyncdShm(const char * name , size_t size);
 
 void destroySyncdShm(syncdShmADT shmem);
 
-int writeSyncdShm(syncdShmADT shmem , const void * buffer , size_t size);
+int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size);
 
-int readSyncdShm(syncdShmADT shmem , void * buffer );
+int readSyncdShm(syncdShmADT shmem , char * buffer );
 
 syncdShmADT openSyncdShm(const char * name , size_t size);
 
