@@ -23,103 +23,89 @@ void checkParams(int argc){
     }
 }
 
-void getSlaveLoad(){
-    // TODO: develop
-    return;
-}
-
 int main(int argc, char * argv[]) {
     setvbuf(stdout,NULL,_IONBF,0);
-    int slaveCount = MIN(SLAVES , argc - 1)
-    int fileCount = argc - 1; //@TODO: reemplazar
-    // Chequeo de parametros
+    int filesToProcess = argc - 1;
+    int slaveCount = MIN(SLAVES , filesToProcess)
+    
+    // Params check
     checkParams(argc);
 
-    //@TODO: Calculamos la cantidad de esclavos y la carga
-    getSlaveLoad();
-
+    // @TODO: concatenar el pid del programa al nombre
     syncdShmADT shmem = createSyncdShm(SHMEM_NAME , BUFF_MAX);
-    if (shmem == NULL)
-    {
+    if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
     puts(SHMEM_NAME);
+
     sleep(5);
+
     char numFiles[NUM_MAX];
-    sprintf(numFiles , "%d", fileCount);
+    sprintf(numFiles , "%d", filesToProcess);
     writeSyncdShm(shmem,numFiles, strlen(numFiles));
     slaveADT slaves[SLAVES];
     char * slaveArgv[] = {"./slave", NULL};
+    char full[slaveCount];
 
     int filesWritten = 0;
-    for (size_t i = 0; i < slaveCount; i++)
-    {
+    for(size_t i = 0; i < slaveCount; i++) {
         slaves[i] = createSlave(slavePath , slaveArgv , NULL);
-         // Enviamos los primeros archivos a los esclavos
-        for(int k = 0; k < FILESPERSLAVE && filesWritten < argc - 1; k++) {
-            if ( writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) + 1 )  == -1){
+        for(int k = 0; k < FILESPERSLAVE && filesWritten < filesToProcess; k++) {
+            if(writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) + 1)  == -1){
                 perror("write");
                 exit(EXIT_FAILURE);
             }
-            filesWritten++;
+            filesWritten++;  
         }
-    }
-    int filesRead = 0;
-    char full[slaveCount];
-    for (size_t i = 0; i < slaveCount; i++)
-    {
         full[i] = 1;
     }
+
+    int filesRead = 0;
     
     int resultFd = open("result.txt", O_CREAT | O_TRUNC | O_WRONLY, 0644);
-    if (resultFd < 0) {
+    if(resultFd < 0) {
         perror("open");
         exit(EXIT_FAILURE);
     }
-    for (size_t i = 0; i < slaveCount; i++) full[i] = 1;
-    while (filesRead < argc - 1)
-    {
+
+    while(filesRead < filesToProcess) {
         anyReadable(slaves,slaveCount);
-        for (size_t i = 0; i < slaveCount; i++)
-        {
-            if (isReadable(slaves[i]))
-            {
+        for(size_t i = 0; i < slaveCount; i++) {
+            if(isReadable(slaves[i])) {
                 char buffer[BUFF_MAX];
                 int len = readFromSlave(slaves[i] , buffer , BUFF_MAX);
                 if (len < 0) {
                     perror("read");
                     exit(EXIT_FAILURE);
                 }
-                if( len > 0 ){
+                if(len > 0) {
                     buffer[len-1] = 0;
                     char * result = strtok(buffer,"\n");
-                    if (result != NULL)
-                    {    
-                        do
-                        {
+                    if(result != NULL) {    
+                        do {
                             int aux = strlen(result);
                             writeSyncdShm(shmem,result,aux);
-                            if( write(resultFd,result,aux) == -1 || write(resultFd,"\n",1) == -1 ){
+                            if(write(resultFd,result,aux) == -1 || write(resultFd,"\n",1) == -1) {
                                 perror("write");
                                 exit(EXIT_FAILURE);
                             }
                             filesRead++;
-                        } while ( (result = strtok(NULL ,"\n")) != NULL);
+                        } while((result = strtok(NULL ,"\n")) != NULL);
                     }
                 }
                 full[i] = 0;
             } 
-            if (!full[i] && filesWritten < argc - 1)
-            {
-                writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) );
+            if(!full[i] && filesWritten < filesToProcess) {
+                writeToSlave(slaves[i] , argv[filesWritten + 1], strlen(argv[filesWritten + 1]));
                 filesWritten++;
             }
         }
-
     }
+
     close(resultFd);
     closeSlaves(slaves , slaveCount);
     writeSyncdShm(shmem,"",0);
     destroySyncdShm(shmem);
+    
     return 0;
 }

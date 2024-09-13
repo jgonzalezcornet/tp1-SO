@@ -3,24 +3,29 @@
 #include "syncdShmADT.h"
 #include <stdlib.h>
 #include <unistd.h>
+
 #define STRING_MAX 128
 #define BUFF_MAX 2048
 #define FORMAT_MAX 20
-int main(){
+
+int main() {
     char string[STRING_MAX]; 
     char format[FORMAT_MAX];
+
+    // For PVS warning
     sprintf(format , "%%%ds",BUFF_MAX - 1);
     scanf(format, string );
     syncdShmADT shmem = openSyncdShm(string,BUFF_MAX);
-    if (shmem == NULL)
-    {
+    if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
+
     readSyncdShm(shmem,string);
     printf("Processing %s file/s:\n", string);
-    while(readSyncdShm(shmem,string)){
+    while(readSyncdShm(shmem,string)) {
         puts(string);
     }
-    destroySyncdShm(shmem);
+    closeSyncdShm(shmem);
+    
     return 0;
 }

@@ -29,8 +29,7 @@ int addOpenPipeEnds(int e1 ,int e2){
 }
 
 void closeExtraFds(){
-    for (size_t i = 0; i < openPipeEndCount ; i+=2)
-    {
+    for(size_t i = 0; i < openPipeEndCount ; i+=2) {
         close(openPipes[i]);
         close(openPipes[i+1]);
     }
@@ -38,16 +37,18 @@ void closeExtraFds(){
 
 slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
     slaveADT slave = malloc(sizeof(struct slaveCDT));
-    if (slave == NULL) {
+    if(slave == NULL) {
         return NULL;
     }
+
     int m2s[2] ,s2m[2];
-    if (pipe(m2s) == -1 || pipe(s2m) == -1) {
+    if(pipe(m2s) == -1 || pipe(s2m) == -1) {
         free(slave);
         return NULL;
     }
+
     int pid = fork();
-    if (pid < 0) {
+    if(pid < 0) {
         // Fork failed
         close(m2s[PIPE_READ]);
         close(m2s[PIPE_WRITE]);
@@ -55,9 +56,10 @@ slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
         close(s2m[PIPE_WRITE]);
         free(slave);
         return NULL;
-    } 
-    if (pid == 0) {
-         // Child process
+    }
+
+    if(pid == 0) {
+        // Child process
         close(m2s[PIPE_WRITE]); 
         close(s2m[PIPE_READ]); 
 
@@ -80,16 +82,16 @@ slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
     slave->pid = pid;
     slave->sstdin = m2s[PIPE_WRITE];
     slave->sstdout = s2m[PIPE_READ];
-    if (addOpenPipeEnds(slave->sstdin , slave->sstdout) == -1 ){
+    if(addOpenPipeEnds(slave->sstdin , slave->sstdout) == -1 ) {
         free(slave);
         return NULL;
     }
-    return slave;
 
+    return slave;
 }
 
 int anyReadable(slaveADT * slaves , size_t count){
-    if (count == 0 || slaves == NULL){
+    if(count == 0 || slaves == NULL) {
         return 0;
     }
     FD_ZERO(&read_fds);
@@ -114,40 +116,42 @@ int anyReadable(slaveADT * slaves , size_t count){
 }
 
 int isReadable(slaveADT slave) {
-    if (slave == NULL) {
+    if(slave == NULL) {
         return 0;
     }
     return FD_ISSET(slave->sstdout,&read_fds);
 }
 
 int readFromSlave(slaveADT slave, char *buff, size_t buffSize) {
-    if (slave == NULL) {
+    if(slave == NULL) {
         return -1;
     }
 
     int count = read(slave->sstdout, buff, buffSize);
-    if (count < 0) {
+    if(count < 0) {
         return -1;
     }
 
     FD_CLR(slave->sstdout,&read_fds);
+
     return count;
 }
 
 int writeToSlave(slaveADT slave, char *buff, size_t buffSize) {
-    if (slave == NULL) {
+    if(slave == NULL) {
         return -1;
     }
+
     int count = write(slave->sstdin , buff, buffSize);
-    if (count < 0 || write(slave->sstdin , "\n" , 1) < 0) {
+    if(count < 0 || write(slave->sstdin , "\n" , 1) < 0) {
         return -1;
     }
+
     return count;
 }
 
-void closeSlaves(slaveADT * slaves , size_t count){
-    for (size_t i = 0; i < count; i++)
-    {
+void closeSlaves(slaveADT * slaves , size_t count) {
+    for(size_t i = 0; i < count; i++) {
         close(slaves[i]->sstdin);
         close(slaves[i]->sstdout);
         free(slaves[i]);
