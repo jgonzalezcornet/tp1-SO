@@ -132,6 +132,9 @@ Temporary Items
 .bash_history
 slave
 app
-vista
+view
 *.txt
 docker.sh
+files
+strace_out
+pvs*
