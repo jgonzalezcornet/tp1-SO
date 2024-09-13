@@ -138,3 +138,6 @@ docker.sh
 files
 strace_out
 pvs*
+.lesshst
+.vscode
+.ssh
