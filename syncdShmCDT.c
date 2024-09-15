@@ -1,6 +1,7 @@
 // This is a personal academic project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "syncdShmADT.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -65,8 +66,8 @@ syncdShmADT initADT(const char * name, size_t size, int shFlags, int mode, int s
     }
     
     rta->shmem->semp = shmp;
-    if(O_CREAT & shFlags) {//@TODO: ver si ponemos lo mismo que arriba
-        if(sem_init(rta->shmem->semp,PSHARED, 0) == -1 ){
+    if(O_CREAT & shFlags) {
+        if(sem_init(rta->shmem->semp,PSHARED, 0) == -1){
             free(rta->shmem); 
             free(rta);  
             munmap(shmp, size + sizeof(sem_t));
@@ -87,11 +88,20 @@ syncdShmADT createSyncdShm(const char * name , size_t size){
     return initADT(name , size , O_CREAT | O_TRUNC | O_RDWR , MODE , TRUE); 
 }
 
-// @TODO: revisar qu onda esto de destroy y close
+
 void destroySyncdShm(syncdShmADT shmem){
-    sem_destroy(shmem->shmem->semp);
-    munmap(shmem->shmem->semp, sizeof(sem_t) + shmem->shmem->buffSize );
-    shm_unlink(shmem->shmName);
+    if(sem_destroy(shmem->shmem->semp) == -1) {
+        perror("sem_destroy");
+        exit(EXIT_FAILURE);
+    }
+    if(munmap(shmem->shmem->semp, sizeof(sem_t) + shmem->shmem->buffSize) == -1) {
+        perror("munmap");
+        exit(EXIT_FAILURE);
+    }
+    if(shm_unlink(shmem->shmName) == -1) {
+        perror("sem_unlink");
+        exit(EXIT_FAILURE);
+    }
     free(shmem->shmem);
     free(shmem);
 }
@@ -116,7 +126,10 @@ syncdShmADT openSyncdShm(const char * name , size_t size){
 }
 
 void closeSyncdShm(syncdShmADT shmem){
-    munmap(shmem->shmem->semp, sizeof(sem_t) + shmem->shmem->buffSize );
+    if(munmap(shmem->shmem->semp, sizeof(sem_t) + shmem->shmem->buffSize) == -1) {
+        perror("munmap");
+        exit(EXIT_FAILURE);
+    }
     free(shmem->shmem);
     free(shmem);
 }

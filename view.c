@@ -12,7 +12,7 @@ int main() {
     char string[STRING_MAX]; 
     char format[FORMAT_MAX];
 
-    // For PVS warning
+    // For PVS warning - stack overflow prevention
     sprintf(format , "%%%ds",BUFF_MAX - 1);
     scanf(format, string );
     syncdShmADT shmem = openSyncdShm(string,BUFF_MAX);

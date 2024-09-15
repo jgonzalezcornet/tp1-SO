@@ -10,7 +10,7 @@
 
 #define NUM_MAX 20
 #define SHMEM_NAME "/md5shmem"
-#define SLAVES              6
+#define SLAVES              5
 #define FILESPERSLAVE       2
 #define BUFF_MAX            4096
 #define MIN(a,b) (a) < (b) ? a : b;
@@ -28,7 +28,6 @@ int main(int argc, char * argv[]) {
     int filesToProcess = argc - 1;
     int slaveCount = MIN(SLAVES , filesToProcess)
     
-    // Params check
     checkParams(argc);
 
     // @TODO: concatenar el pid del programa al nombre
