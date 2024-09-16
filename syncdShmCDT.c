@@ -122,7 +122,7 @@ int readSyncdShm(syncdShmADT shmem , char * buffer){
     sem_wait(shmem->shmem->semp);
     char * aux = stpcpy(buffer , shmem->shmem->buff + shmem->readPos);
 
-    shmem->readPos += (aux - buffer) + 2;
+    shmem->readPos += (aux - buffer) + 1;
     return aux - buffer;
 }
 

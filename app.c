@@ -12,11 +12,24 @@
 #define SHMEM_NAME_FORMAT "/md5shmem-%d"
 #define SHMEM_NAME_SIZE 11
 #define MAX_PID_LEN 11 
-#define SLAVES              5
-#define FILESPERSLAVE       2
+#define SLAVES              10
+#define FILESPERSLAVE       4
 #define BUFF_MAX            4096
 #define MIN(a,b) (a) < (b) ? a : b;
 char * slavePath = "./slave";
+int filesToProcess;
+int filesWritten = 0;
+
+void writeFilesToSlave(slaveADT slave , char * slaveFileCount , char * files[]){
+     while( *slaveFileCount < FILESPERSLAVE && filesWritten < filesToProcess) {
+            if(writeToSlave(slave , files[filesWritten + 1] , strlen(files[filesWritten + 1]) + 1)  == -1){
+                perror("write");
+                exit(EXIT_FAILURE);
+            }
+            filesWritten++;  
+            (*slaveFileCount)++;
+        }
+}
 
 size_t countChar(char * s, size_t len, char c){
     size_t count = 0;
@@ -35,7 +48,7 @@ void checkParams(int argc){
 
 int main(int argc, char * argv[]) {
     setvbuf(stdout,NULL,_IONBF,0);
-    int filesToProcess = argc - 1;
+    filesToProcess = argc - 1;
     int slaveCount = MIN(SLAVES , filesToProcess)
     
     checkParams(argc);
@@ -48,7 +61,7 @@ int main(int argc, char * argv[]) {
     }
     puts(shname);
 
-    sleep(10);
+    sleep(1);
 
     char numFiles[NUM_MAX];
     sprintf(numFiles , "%d", filesToProcess);
@@ -60,17 +73,10 @@ int main(int argc, char * argv[]) {
     char * slaveArgv[] = {"./slave", NULL};
     char full[slaveCount];
 
-    int filesWritten = 0;
     for(size_t i = 0; i < slaveCount; i++) {
+        full[i] = 0;
         slaves[i] = createSlave(slavePath , slaveArgv , NULL);
-        for(int k = 0; k < FILESPERSLAVE && filesWritten < filesToProcess; k++) {
-            if(writeToSlave(slaves[i] , argv[filesWritten + 1] , strlen(argv[filesWritten + 1]) + 1)  == -1){
-                perror("write");
-                exit(EXIT_FAILURE);
-            }
-            filesWritten++;  
-        }
-        full[i] = 1;
+        writeFilesToSlave(slaves[i] , full + i , argv);
     }
 
     int filesRead = 0;
@@ -93,7 +99,7 @@ int main(int argc, char * argv[]) {
                 }
                 if(len > 0) {
                     buffer[len-1] = 0;
-                    if(writeSyncdShm(shmem,buffer,len) == -1) {
+                    if(writeSyncdShm(shmem,buffer,len - 1) == -1) {
                         perror("writeSyncdShm");
                         exit(EXIT_FAILURE);
                     }
@@ -102,21 +108,14 @@ int main(int argc, char * argv[]) {
                         perror("write");
                         exit(EXIT_FAILURE);
                     }
-                    filesRead += countChar(buffer, len, '\n');
-                    full[i] = 0;
+                    int resultCount = countChar(buffer, len, '\n');
+                    filesRead += resultCount;
+                    full[i] -= resultCount;
                 }
+                writeFilesToSlave(slaves[i] , full + i , argv);
             } 
-            if(!full[i] && filesWritten < filesToProcess) {
-                filesWritten++;
-                if(writeToSlave(slaves[i] , argv[filesWritten], strlen(argv[filesWritten])) == -1) {
-                    perror("writeToSlave");
-                    exit(EXIT_FAILURE);
-                }
-                full[i] = 1;
-            }
         }
     }
-
     close(resultFd);
     closeSlaves(slaves , slaveCount);
     writeSyncdShm(shmem,"",0);
