@@ -15,6 +15,9 @@
 #define SLAVES              10
 #define FILESPERSLAVE       4
 #define BUFF_MAX            4096
+#define SHMEM_SIZE 4096
+#define SHMEM_SSIZE "4096"
+
 #define MIN(a,b) (a) < (b) ? a : b;
 char * slavePath = "./slave";
 int filesToProcess;
@@ -55,12 +58,12 @@ int main(int argc, char * argv[]) {
 
     char shname[SHMEM_NAME_SIZE + MAX_PID_LEN];
     sprintf(shname , SHMEM_NAME_FORMAT , getpid());
-    syncdShmADT shmem = createSyncdShm(shname , BUFF_MAX);
+    syncdShmADT shmem = createSyncdShm(shname , SHMEM_SIZE);
     if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
     puts(shname);
-
+    puts(SHMEM_SSIZE);
     sleep(1);
 
     char numFiles[NUM_MAX];

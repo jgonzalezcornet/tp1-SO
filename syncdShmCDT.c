@@ -76,7 +76,7 @@ syncdShmADT initADT(const char * name, size_t size, int shFlags, int mode, int s
         }
     }
 
-    rta->shmem->buff = shmp + sizeof(sem_t);
+    rta->shmem->buff = (char*)shmp + sizeof(sem_t);
     rta->shmem->buffSize = size;
     rta->readPos = 0;
     rta->writePos = 0;

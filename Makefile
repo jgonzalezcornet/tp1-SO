@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall
 
 TARGET_APP = app
 TARGET_SLAVE = slave

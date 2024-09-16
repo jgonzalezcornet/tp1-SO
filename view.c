@@ -5,18 +5,19 @@
 #include <unistd.h>
 
 #define STRING_MAX 1024
-#define BUFF_MAX 2048
 #define FORMAT_MAX 20
 #define SHNAME_MAX 128
-
+#define MAX_DIGITS 11
 int main() {
     char shName[SHNAME_MAX]; 
     char format[FORMAT_MAX];
-
+    char shSize[MAX_DIGITS];
     // For PVS warning - stack overflow prevention
-    sprintf(format , "%%%ds",BUFF_MAX - 1);
+    sprintf(format , "%%%ds",SHNAME_MAX - 1);
     scanf(format, shName);
-    syncdShmADT shmem = openSyncdShm(shName,BUFF_MAX);
+    sprintf(format , "%%%ds",MAX_DIGITS - 1);
+    scanf(format,shSize);
+    syncdShmADT shmem = openSyncdShm(shName,atoi(shSize));
     if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
