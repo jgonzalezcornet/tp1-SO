@@ -80,7 +80,6 @@ syncdShmADT initADT(const char * name, size_t size, int shFlags, int mode, int s
     rta->shmem->buffSize = size;
     rta->readPos = 0;
     rta->writePos = 0;
-
     return rta;
 }
 
@@ -99,16 +98,21 @@ void destroySyncdShm(syncdShmADT shmem){
         exit(EXIT_FAILURE);
     }
     if(shm_unlink(shmem->shmName) == -1) {
-        perror("sem_unlink");
+        perror(shmem->shmName);
         exit(EXIT_FAILURE);
     }
     free(shmem->shmem);
     free(shmem);
 }
 
-int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size ){ //@TODO: validar buffsize
+int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size ){
+    if (size + shmem->writePos > shmem->shmem->buffSize){
+        perror("buffer_full");
+        return -1;
+    }
+    
     char * aux = shmem->shmem->buff + shmem->writePos;
-    memcpy(aux , buffer , size + 1);
+    memcpy(aux , buffer , size);
     shmem->writePos += size + 1;
     sem_post(shmem->shmem->semp);
     return size;
@@ -117,7 +121,8 @@ int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size ){ //@TO
 int readSyncdShm(syncdShmADT shmem , char * buffer){
     sem_wait(shmem->shmem->semp);
     char * aux = stpcpy(buffer , shmem->shmem->buff + shmem->readPos);
-    shmem->readPos += aux - buffer + 1;
+
+    shmem->readPos += (aux - buffer) + 2;
     return aux - buffer;
 }
 

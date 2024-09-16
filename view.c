@@ -4,28 +4,28 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define STRING_MAX 128
+#define STRING_MAX 512
 #define BUFF_MAX 2048
 #define FORMAT_MAX 20
 
 int main() {
-    char string[STRING_MAX]; 
+    char shName[STRING_MAX]; 
     char format[FORMAT_MAX];
 
     // For PVS warning - stack overflow prevention
     sprintf(format , "%%%ds",BUFF_MAX - 1);
-    scanf(format, string );
-    syncdShmADT shmem = openSyncdShm(string,BUFF_MAX);
+    scanf(format, shName );
+    syncdShmADT shmem = openSyncdShm(shName,BUFF_MAX);
     if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
-
-    readSyncdShm(shmem,string);
-    printf("Processing %s file/s:\n", string);
-    while(readSyncdShm(shmem,string)) {
-        puts(string);
+    char buffer[STRING_MAX];
+    readSyncdShm(shmem,buffer);
+    printf("Processing %s file/s:\n", buffer);
+    while(readSyncdShm(shmem,buffer)) {
+        puts(buffer);
     }
-    closeSyncdShm(shmem);
+    destroySyncdShm(shmem);
     
     return 0;
 }

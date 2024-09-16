@@ -9,13 +9,23 @@
 #include "syncdShmADT.h"
 
 #define NUM_MAX 20
-#define SHMEM_NAME "/md5shmem"
+#define SHMEM_NAME_FORMAT "/md5shmem-%d"
+#define SHMEM_NAME_SIZE 11
+#define MAX_PID_LEN 11 
 #define SLAVES              5
 #define FILESPERSLAVE       2
 #define BUFF_MAX            4096
 #define MIN(a,b) (a) < (b) ? a : b;
 char * slavePath = "./slave";
 
+size_t countChar(char * s, size_t len, char c){
+    size_t count = 0;
+    for(size_t i = 0; i < len; i++) {
+        if(s[i] == c) count++; 
+    }
+    return count;
+    
+}
 void checkParams(int argc){
     if(argc < 2) {
         fprintf(stderr, "Error. Must send at least one file path.\n");
@@ -30,18 +40,22 @@ int main(int argc, char * argv[]) {
     
     checkParams(argc);
 
-    // @TODO: concatenar el pid del programa al nombre
-    syncdShmADT shmem = createSyncdShm(SHMEM_NAME , BUFF_MAX);
+    char shname[SHMEM_NAME_SIZE + MAX_PID_LEN];
+    sprintf(shname , SHMEM_NAME_FORMAT , getpid());
+    syncdShmADT shmem = createSyncdShm(shname , BUFF_MAX);
     if (shmem == NULL) {
         exit(EXIT_FAILURE);
     }
-    puts(SHMEM_NAME);
+    puts(shname);
 
-    sleep(5);
+    sleep(10);
 
     char numFiles[NUM_MAX];
     sprintf(numFiles , "%d", filesToProcess);
-    writeSyncdShm(shmem,numFiles, strlen(numFiles));
+    if( writeSyncdShm(shmem,numFiles, strlen(numFiles)) == -1 ) {
+        perror("writeSyncdShm");
+        exit(EXIT_FAILURE);
+    }
     slaveADT slaves[SLAVES];
     char * slaveArgv[] = {"./slave", NULL};
     char full[slaveCount];
@@ -79,24 +93,26 @@ int main(int argc, char * argv[]) {
                 }
                 if(len > 0) {
                     buffer[len-1] = 0;
-                    char * result = strtok(buffer,"\n");
-                    if(result != NULL) {    
-                        do {
-                            int aux = strlen(result);
-                            writeSyncdShm(shmem,result,aux);
-                            if(write(resultFd,result,aux) == -1 || write(resultFd,"\n",1) == -1) {
-                                perror("write");
-                                exit(EXIT_FAILURE);
-                            }
-                            filesRead++;
-                        } while((result = strtok(NULL ,"\n")) != NULL);
+                    if(writeSyncdShm(shmem,buffer,len) == -1) {
+                        perror("writeSyncdShm");
+                        exit(EXIT_FAILURE);
                     }
+                    buffer[len-1] = '\n';
+                    if(write(resultFd,buffer,len) == -1) {
+                        perror("write");
+                        exit(EXIT_FAILURE);
+                    }
+                    filesRead += countChar(buffer, len, '\n');
+                    full[i] = 0;
                 }
-                full[i] = 0;
             } 
             if(!full[i] && filesWritten < filesToProcess) {
-                writeToSlave(slaves[i] , argv[filesWritten + 1], strlen(argv[filesWritten + 1]));
                 filesWritten++;
+                if(writeToSlave(slaves[i] , argv[filesWritten], strlen(argv[filesWritten])) == -1) {
+                    perror("writeToSlave");
+                    exit(EXIT_FAILURE);
+                }
+                full[i] = 1;
             }
         }
     }
@@ -104,7 +120,7 @@ int main(int argc, char * argv[]) {
     close(resultFd);
     closeSlaves(slaves , slaveCount);
     writeSyncdShm(shmem,"",0);
-    destroySyncdShm(shmem);
+    closeSyncdShm(shmem);
     
     return 0;
 }
