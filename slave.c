@@ -33,7 +33,7 @@ int main(int argc, char * argv[]) {
         
         char md5[MD5_LEN + 1] = {0};
         int md5Len = readFromSlave(slaveMd5 , md5 , MD5_LEN );
-        if (md5Len == -1) {
+        if(md5Len == -1) {
             perror("readFromSlave");
             exit(EXIT_FAILURE);
         }
@@ -42,7 +42,7 @@ int main(int argc, char * argv[]) {
         int pid = getpid();
         char result[MAX_PATH + md5Len + MAX_PID + FORMAT_LENGHT];           
         int aux = sprintf(result, OUTPUT_FORMAT, file, md5, pid);          
-        if (aux < 0) {
+        if(aux < 0) {
             perror("sprintf");
             exit(EXIT_FAILURE);
         }

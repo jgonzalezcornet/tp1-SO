@@ -105,8 +105,8 @@ void destroySyncdShm(syncdShmADT shmem){
     free(shmem);
 }
 
-int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size ){
-    if (size + shmem->writePos > shmem->shmem->buffSize){
+int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size) {
+    if(size + shmem->writePos > shmem->shmem->buffSize) {
         perror("buffer_full");
         return -1;
     }
@@ -118,7 +118,7 @@ int writeSyncdShm(syncdShmADT shmem , const char * buffer , size_t size ){
     return size;
 }
 
-int readSyncdShm(syncdShmADT shmem , char * buffer){
+int readSyncdShm(syncdShmADT shmem , char * buffer) {
     sem_wait(shmem->shmem->semp);
     char * aux = stpcpy(buffer , shmem->shmem->buff + shmem->readPos);
 
@@ -126,11 +126,11 @@ int readSyncdShm(syncdShmADT shmem , char * buffer){
     return aux - buffer;
 }
 
-syncdShmADT openSyncdShm(const char * name , size_t size){
+syncdShmADT openSyncdShm(const char * name , size_t size) {
     return initADT(name , size , O_RDWR , 0 , FALSE);
 }
 
-void closeSyncdShm(syncdShmADT shmem){
+void closeSyncdShm(syncdShmADT shmem) {
     if(munmap(shmem->shmem->semp, sizeof(sem_t) + shmem->shmem->buffSize) == -1) {
         perror("munmap");
         exit(EXIT_FAILURE);

@@ -11,7 +11,7 @@
 #define BLOCK 10
 #define OPEN_PIPE_MAX 256
 
-struct slaveCDT{
+struct slaveCDT {
     int pid;
     int sstdin;
     int sstdout;
@@ -22,20 +22,20 @@ int openPipes[OPEN_PIPE_MAX];
 
 fd_set read_fds;
 
-int addOpenPipeEnds(int e1 ,int e2){
+int addOpenPipeEnds(int e1 ,int e2) {
     openPipes[openPipeEndCount++] = e1;
     openPipes[openPipeEndCount++] = e2;
     return 0;
 }
 
-void closeExtraFds(){
+void closeExtraFds() {
     for(size_t i = 0; i < openPipeEndCount ; i+=2) {
         close(openPipes[i]);
         close(openPipes[i+1]);
     }
 }
 
-slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
+slaveADT createSlave(const char * path , char * argv[] , char * envp[]) {
     slaveADT slave = malloc(sizeof(struct slaveCDT));
     if(slave == NULL) {
         return NULL;
@@ -82,7 +82,7 @@ slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
     slave->pid = pid;
     slave->sstdin = m2s[PIPE_WRITE];
     slave->sstdout = s2m[PIPE_READ];
-    if(addOpenPipeEnds(slave->sstdin , slave->sstdout) == -1 ) {
+    if(addOpenPipeEnds(slave->sstdin , slave->sstdout) == -1) {
         free(slave);
         return NULL;
     }
@@ -90,7 +90,7 @@ slaveADT createSlave(const char * path , char * argv[] , char * envp[] ){
     return slave;
 }
 
-int anyReadable(slaveADT * slaves , size_t count){
+int anyReadable(slaveADT * slaves , size_t count) {
     if(count == 0 || slaves == NULL) {
         return 0;
     }
@@ -98,16 +98,16 @@ int anyReadable(slaveADT * slaves , size_t count){
 
     int maxStdoutFd = -1;
 
-    for (size_t i = 0; i < count; i++) {
+    for(size_t i = 0; i < count; i++) {
         FD_SET(slaves[i]->sstdout, &read_fds);
-        if (slaves[i]->sstdout > maxStdoutFd) {
+        if(slaves[i]->sstdout > maxStdoutFd) {
             maxStdoutFd = slaves[i]->sstdout;
         }
     }
 
     int ret = select(maxStdoutFd + 1, &read_fds, NULL, NULL, NULL);
 
-    if (ret < 0) {
+    if(ret < 0) {
         perror("select");
         return -1;
     }
